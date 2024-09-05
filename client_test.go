@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/joho/godotenv"
 	"log"
 	"net/http"
@@ -324,6 +325,75 @@ func TestSearchClient_FindUsers(t *testing.T) {
 			want:            nil,
 			wantErr:         true,
 			wantErrContains: "timeout",
+		}
+
+		got, err := testCase.srv.FindUsers(testCase.req)
+		checkWantErr(t, got, err, testCase)
+	})
+
+	tsWithInvalidJson := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Invalid json", http.StatusBadRequest)
+	}))
+
+	t.Run("case with Invalid json", func(t *testing.T) {
+		testCase := TestCase{
+			Name: "Error not start",
+			srv: SearchClient{
+				AccessToken: srv.AccessToken,
+				URL:         tsWithInvalidJson.URL,
+			},
+			req:             SearchRequest{},
+			want:            nil,
+			wantErr:         true,
+			wantErrContains: "cant unpack error json: invalid character",
+		}
+
+		got, err := testCase.srv.FindUsers(testCase.req)
+		checkWantErr(t, got, err, testCase)
+	})
+
+	tsWithValidJsonBadRequest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		errResp, _ := json.Marshal(SearchErrorResponse{Error: "Valid"})
+		http.Error(w, string(errResp), http.StatusBadRequest)
+	}))
+
+	t.Run("case with valid json in bad request", func(t *testing.T) {
+		testCase := TestCase{
+			Name: "Error not start",
+			srv: SearchClient{
+				AccessToken: srv.AccessToken,
+				URL:         tsWithValidJsonBadRequest.URL,
+			},
+			req:             SearchRequest{},
+			want:            nil,
+			wantErr:         true,
+			wantErrContains: "unknown bad request error:",
+		}
+
+		got, err := testCase.srv.FindUsers(testCase.req)
+		checkWantErr(t, got, err, testCase)
+	})
+
+	tsBadBodyToUnmarshal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		res, _ := json.Marshal(" ")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(res)
+
+	}))
+
+	t.Run("case with valid json in bad request", func(t *testing.T) {
+		testCase := TestCase{
+			Name: "Error not start",
+			srv: SearchClient{
+				AccessToken: srv.AccessToken,
+				URL:         tsBadBodyToUnmarshal.URL,
+			},
+			req:             SearchRequest{},
+			want:            nil,
+			wantErr:         true,
+			wantErrContains: "cant unpack result json",
 		}
 
 		got, err := testCase.srv.FindUsers(testCase.req)
